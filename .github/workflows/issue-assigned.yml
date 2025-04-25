@@ -52,6 +52,7 @@ jobs:
       - name: Checkout issue branch
         uses: actions/checkout@v3
         with:
+          fetch-depth: 0
           ref: ${{ needs.create-branch.outputs.branch }}
       - name: Setup Node.js (>=20)
         uses: actions/setup-node@v3
@@ -81,6 +82,7 @@ jobs:
       - name: Checkout issue branch
         uses: actions/checkout@v3
         with:
+          fetch-depth: 0
           ref: ${{ needs.create-branch.outputs.branch }}
       - name: Commit changes (including empty commit if no changes)
         run: |
@@ -101,11 +103,6 @@ jobs:
     needs: commit-changes
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.commit-changes.outputs.branch }}
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
