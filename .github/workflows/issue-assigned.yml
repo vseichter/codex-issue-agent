@@ -93,27 +93,28 @@ jobs:
           echo "=== working tree files ==="
           ls -R .
 
-      - name: Commit & push Codex CLI changes
+      - name: Commit & force-push Codex CLI changes
         shell: bash
         run: |
           branch="${{ steps.create_branch.outputs.branch }}"
 
-          # configure bot identity
+          # 1. Configure the bot identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # stage absolutely everything
+          # 2. Stage absolutely everything (new, modified, deleted)
           git add -A
 
-          # commit if there are changes, otherwise note that nothing changed
-          if git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"; then
-            echo "✅ Committed Codex changes"
-          else
+          # 3. Commit if there are any staged changes
+          if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
+          else
+            git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           fi
 
-          # push your local branch up to the same remote branch
-          git push origin "$branch":"$branch"
+          # 4. Force-push HEAD to the remote branch and show verbose output
+          echo "🚀 Force-pushing HEAD to origin/$branch"
+          git push --force --verbose origin "HEAD:$branch"
 
 
       - name: Create Pull Request
