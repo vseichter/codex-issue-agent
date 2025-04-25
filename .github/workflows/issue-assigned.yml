@@ -10,25 +10,17 @@ on:
     types: [assigned]
 
 jobs:
-  notify-on-assignment:
+  create-branch:
+    name: Create issue branch
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.branch.outputs.branch }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Setup Node.js (>=20)
-        uses: actions/setup-node@v3
-        with:
-          # Install Node.js version 20 or greater
-          node-version: '>=20'
-      - name: Install OpenAI Codex CLI
-        run: npm install -g @openai/codex
-      - name: Set OpenAI API Key
-        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
-        shell: bash
-
-      - name: Create and push branch for issue
-        id: create_branch
+      - name: Create and push branch
+        id: branch
         run: |
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
@@ -41,26 +33,49 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           git push -u origin "$branch"
-          # Output branch name for PR action
           echo "branch=$branch" >> $GITHUB_OUTPUT
+
+  run-codex:
+    name: Run Codex CLI
+    needs: create-branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout issue branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.create-branch.outputs.branch }}
+      - name: Setup Node.js (>=20)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '>=20'
+      - name: Install OpenAI Codex CLI
+        run: npm install -g @openai/codex
+      - name: Set OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
         shell: bash
-      - name: Run Codex CLI in full-auto mode with issue description
+      - name: Generate edits with Codex
         run: |
           num="${{ github.event.issue.number }}"
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
-          # Run in full-auto and quiet (non-interactive) mode to avoid raw-mode errors
           codex --full-auto --quiet "$prompt"
         shell: bash
-      - name: Commit Codex CLI changes
+
+  commit-changes:
+    name: Commit Codex CLI changes
+    needs: run-codex
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout issue branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.create-branch.outputs.branch }}
+      - name: Commit changes
         run: |
-          # Configure Git author
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Stage all changes
           git add .
-          # Commit if there are changes
           if git diff-index --quiet HEAD; then
             echo "No changes to commit"
           else
@@ -68,15 +83,18 @@ jobs:
             git push
           fi
         shell: bash
+
+  create-pr:
+    name: Create Pull Request
+    needs: commit-changes
+    runs-on: ubuntu-latest
+    steps:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ steps.create_branch.outputs.branch }}
+          branch: ${{ needs.create-branch.outputs.branch }}
           title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
-      - name: Notify that 'vseichter' was assigned
-        run: |
-          echo "Issue #${{ github.event.issue.number }} - '${{ github.event.issue.title }}' was assigned to vseichter"
