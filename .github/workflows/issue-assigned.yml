@@ -50,10 +50,15 @@ jobs:
         shell: bash
         run: |
           branch="${{ steps.derive_branch.outputs.branch }}"
-          git config user.name "Vincent Seichter"
-          git config user.email "vseichter@users.noreply.github.com"
-
-          # If the branch already exists remotely, fetch it; otherwise create it
+      
+          # Configure git to use the GitHub Actions bot identity
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+          # Rewrite origin to use the GITHUB_TOKEN for all pushes/fetches
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+      
+          # If the branch exists remotely, fetch & switch; if locally, switch; else create it
           if git ls-remote --exit-code --heads origin "$branch"; then
             git fetch origin "$branch"
             git switch "$branch"
@@ -61,8 +66,13 @@ jobs:
             git switch "$branch"
           else
             git switch -c "$branch"
+          fi
+      
+          # Push the new branch (only if it wasn’t already on origin)
+          if ! git ls-remote --exit-code --heads origin "$branch"; then
             git push -u origin "$branch"
           fi
+        
 
       - name: Add placeholder test file
         shell: bash
