@@ -66,27 +66,39 @@ jobs:
 
       - name: Run Codex CLI in full-auto mode with issue description
         run: |
-          const { owner, repo } = context.repo;
-          const branch = '${{ steps.derive_branch.outputs.branch }}';
-          const issueNumber = context.payload.issue.number;
-
-          const filePath = 'tests/unit/test_placeholder.py';
-          const content = `# tests/unit/test_placeholder.py
-          
           num="${{ github.event.issue.number }}"
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
-
-          await github.rest.repos.createOrUpdateFileContents({
-            owner, repo,
-            path: filePath,
-            message: `chore: add placeholder test for issue #${issueNumber}`,
-            content: Buffer.from(content).toString('base64'),
-            branch
-          });
         shell: bash
+        
+      - name: Update folder contents
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const branch = '${{ steps.derive_branch.outputs.branch }}';
+            const issueNumber = context.payload.issue.number;
+      
+            // read the test file you generated via Codex CLI
+            const filePath = 'tests/unit/test_placeholder.py';
+            if (!fs.existsSync(filePath)) {
+              throw new Error(`${filePath} not found – make sure your Codex step wrote it`);
+            }
+            const testContent = fs.readFileSync(filePath, 'utf8');
+      
+            // commit/update via the REST API
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path: filePath,
+              message: `chore: add placeholder test for issue #${issueNumber}`,
+              content: Buffer.from(testContent).toString('base64'),
+              branch
+            });
 
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
