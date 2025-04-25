@@ -1,149 +1,123 @@
 name: Issue Assigned to vseichter
 
-permissions:
-  contents: write        # allow pushing commits and branches
-  pull-requests: write   # allow creating pull requests
-  issues: write          # allow updating issues if needed
-
 on:
   issues:
     types: [assigned]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   create-branch-and-pr:
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
 
     steps:
-      # Checkout the default branch with full history
-      - name: Checkout repository (full history)
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          persist-credentials: true
-          ref: ${{ github.event.repository.default_branch }}
-
-      - name: Log env after checkout
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "### After checkout ###"
-          echo "Date: $(date)"
-          echo "GitHub event: $GITHUB_EVENT_NAME"
-          echo "Working dir: $(pwd)"
-          echo "Directory listing:"
-          ls -alh
-          echo "Git remotes:"
-          git remote -v
-
-      - name: Setup Node.js (>=20)
-        uses: actions/setup-node@v3
-        with:
-          node-version: '>=20'
-
-      - name: Install OpenAI Codex CLI
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "### Installing Codex CLI ###"
-          npm install -g @openai/codex
-          echo "Codex version: $(codex --version || echo 'not installed')"
-
-      - name: Export OpenAI API Key
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "### Exporting OpenAI key ###"
-          echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
-
       - name: Determine branch name
         id: derive_branch
         shell: bash
         run: |
-          set -euxo pipefail
-          echo "### Determining branch name ###"
+          num=${{ github.event.issue.number }}
           title="${{ github.event.issue.title }}"
-          num="${{ github.event.issue.number }}"
           sanitized=$(echo "$title" \
             | tr '[:upper:]' '[:lower:]' \
             | sed -E 's/[^a-z0-9]+/-/g' \
             | sed -E 's/^-+|-+$//g')
-          branch="issue-${num}-${sanitized}"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "branch=issue-${num}-${sanitized}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout or create branch
-        shell: bash
-        run: |
-          set -euxo pipefail
-          branch="${{ steps.derive_branch.outputs.branch }}"
-          echo "### Checkout or create branch ($branch) ###"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          if git ls-remote --exit-code --heads origin "$branch"; then
-            git fetch origin "$branch"
-            git switch "$branch"
-          elif git show-ref --verify --quiet "refs/heads/$branch"; then
-            git switch "$branch"
-          else
-            git switch -c "$branch"
-          fi
-          if ! git ls-remote --exit-code --heads origin "$branch"; then
-            git push -u origin "$branch"
-          fi
-
-      - name: Add placeholder test file
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p tests/unit
-          cat << 'EOF' > tests/unit/test_placeholder.py
-          # tests/unit/test_placeholder.py
-          # A basic pytest test suite
-
-          import pytest
-
-          def test_true_is_truthy():
-              assert True, "True should be truthy"
-
-          def test_sample_math():
-              # A simple math test
-              assert 1 + 1 == 2, "Basic arithmetic should work"
-
-          @pytest.mark.parametrize("input,expected", [
-              (0, 0),
-              (1, 1),
-              (2, 4),
-              (3, 9),
-          ])
-          def test_square(input, expected):
-              # Example function to square a number
-              def square(x):
-                  return x * x
-              assert square(input) == expected
-          EOF
-          
-      - name: Commit & push placeholder test
-        uses: EndBug/add-and-commit@v9
+      - name: Create (or fetch) branch via REST API
+        uses: actions/github-script@v6
         with:
-          add: 'tests/unit'
-          author_name: github-actions[bot]
-          author_email: 41898282+github-actions[bot]@users.noreply.github.com
-          message: 'chore: add placeholder test for issue #${{ github.event.issue.number }}'
-          push: true
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = '${{ steps.derive_branch.outputs.branch }}';
+            const defaultBranch = context.payload.repository.default_branch;
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
+            // try fetching the branch
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+            } catch {
+              // branch doesn't exist → get default‐branch SHA and create new branch
+              const { data: baseRef } = await github.rest.git.getRef({
+                owner, repo, ref: `heads/${defaultBranch}`
+              });
+              await github.rest.git.createRef({
+                owner, repo,
+                ref: `refs/heads/${branch}`,
+                sha: baseRef.object.sha
+              });
+            }
+
+      - name: Add placeholder test via REST API
+        uses: actions/github-script@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ steps.derive_branch.outputs.branch }}
-          title: "chore: add placeholder test for issue #${{ github.event.issue.number }}"
-          body: |
-            Automated PR to add placeholder test for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-          base: main
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = '${{ steps.derive_branch.outputs.branch }}';
+            const issueNumber = context.payload.issue.number;
 
-      - name: Notify assignment
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "Issue #${{ github.event.issue.number }} assigned to vseichter at $(date)"
+            const filePath = 'tests/unit/test_placeholder.py';
+            const content = `# tests/unit/test_placeholder.py
+            # A basic pytest test suite
+
+            import pytest
+
+            def test_true_is_truthy():
+                assert True, "True should be truthy"
+
+            def test_sample_math():
+                assert 1 + 1 == 2, "Basic arithmetic should work"
+
+            @pytest.mark.parametrize("input,expected", [
+                (0, 0),
+                (1, 1),
+                (2, 4),
+                (3, 9),
+            ])
+            def test_square(input, expected):
+                def square(x):
+                    return x * x
+                assert square(input) == expected
+            `;
+                        await github.rest.repos.createOrUpdateFileContents({
+                          owner, repo,
+                          path: filePath,
+                          message: `chore: add placeholder test for issue #${issueNumber}`,
+                          content: Buffer.from(content).toString('base64'),
+                          branch
+                        });
+
+      - name: Open Pull Request via REST API
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = '${{ steps.derive_branch.outputs.branch }}';
+            const base = context.payload.repository.default_branch;
+            const issueNumber = context.payload.issue.number;
+            await github.rest.pulls.create({
+              owner, repo,
+              head: branch,
+              base,
+              title: `chore: add placeholder test for issue #${issueNumber}`,
+              body: `Automated PR to add placeholder test for issue #${issueNumber}: ${{ github.event.issue.title }}`
+            });
+
+      - name: Comment on the issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Issue #${context.issue.number} assigned to vseichter at ${new Date().toISOString()}`
+            });
