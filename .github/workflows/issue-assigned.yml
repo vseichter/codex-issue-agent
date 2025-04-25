@@ -126,17 +126,17 @@ jobs:
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const branch = '${{ steps.derive_branch.outputs.branch }}';
-            const sha    = '${{ steps.commit.outputs.sha }}';
-            console.log(`Attaching commit ${sha} to branch ${branch}`);
-            await github.git.updateRef({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              ref:   `heads/${branch}`,
-              sha:   sha,
-              force: true,
-            });
+        script: |
+          const branch = '${{ steps.derive_branch.outputs.branch }}';
+          const sha    = '${{ steps.commit.outputs.sha }}';
+          console.log(`Attaching commit ${sha} to branch ${branch}`);
+          await github.rest.git.updateRef({
+            owner: context.repo.owner,
+            repo:  context.repo.repo,
+            ref:   `heads/${branch}`,
+            sha:   sha,
+            force: true,
+          });
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
