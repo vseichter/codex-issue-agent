@@ -46,10 +46,27 @@ jobs:
           ref: ${{ steps.derive_branch.outputs.branch }}
           fetch-depth: 0
 
-      - name: Checkout target branch
+      - name: Checkout or create branch
+        shell: bash
         run: |
-          git checkout ${{ steps.derive_branch.outputs.branch }}
+          branch="${{ steps.derive_branch.outputs.branch }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # if exists locally
+          if git rev-parse --verify --quiet "$branch"; then
+            git checkout "$branch"
+
+          # else if exists on origin → track it
+          elif git ls-remote --exit-code --heads origin "$branch"; then
+            git fetch origin "$branch"
+            git checkout --track origin/"$branch"
+
+          # else create, track & push
+          else
+            git checkout -b "$branch"
+            git push -u origin "$branch"
+          fi
 
       - name: Add placeholder test file
         shell: bash
