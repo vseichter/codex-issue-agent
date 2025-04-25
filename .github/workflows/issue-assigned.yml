@@ -1,9 +1,9 @@
 name: Issue Assigned to vseichter
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: write        # allow pushing commits and branches
+  pull-requests: write   # allow creating pull requests
+  issues: write          # allow updating issues if needed
 
 on:
   issues:
@@ -14,7 +14,7 @@ jobs:
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository (full)
+      - name: Checkout repository (full clone)
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -36,6 +36,7 @@ jobs:
         id: create_branch
         shell: bash
         run: |
+          # Build a URL-safe branch name: issue-<num>-<sanitized-title>
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
           sanitized=$(echo "$title" \
@@ -44,30 +45,30 @@ jobs:
             | sed -E 's/^-+|-+$//g')
           branch="issue-${num}-${sanitized}"
 
+          # Configure Git identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # If local branch exists, check it out
           if git rev-parse --verify --quiet "$branch"; then
-            echo "Local branch exists → checking out"
+            echo "Local branch '$branch' exists → checking out"
             git checkout "$branch"
+
+          # Else if remote branch exists, fetch & track it
           elif git ls-remote --exit-code --heads origin "$branch"; then
-            echo "Remote branch exists → fetching & checking out"
+            echo "Remote branch '$branch' exists → fetching & checking out"
             git fetch origin "$branch"
             git checkout -b "$branch" origin/"$branch"
+
+          # Otherwise create new branch from default and push
           else
-            echo "Creating new branch → pushing"
+            echo "Creating new branch '$branch' from default branch"
             git checkout -b "$branch"
             git push -u origin "$branch"
           fi
 
+          # Expose branch name to later steps
           echo "branch=$branch" >> $GITHUB_OUTPUT
-
-      - name: Re-checkout the feature branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ steps.create_branch.outputs.branch }}
-          fetch-depth: 0
-          persist-credentials: true
 
       - name: Run Codex CLI in full-auto mode with issue description
         shell: bash
@@ -78,23 +79,27 @@ jobs:
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
 
-      - name: Commit & force-push Codex CLI changes
+      - name: Commit & push Codex CLI changes
         shell: bash
         run: |
           branch="${{ steps.create_branch.outputs.branch }}"
 
+          # Ensure Git identity is set
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Stage all new/modified/deleted files
           git add -A
 
+          # Commit if there are staged changes
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           fi
 
-          git push --force --verbose origin "HEAD:$branch"
+          # Push local HEAD to the remote branch
+          git push origin "$branch":"$branch"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
@@ -105,3 +110,8 @@ jobs:
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
+
+      - name: Notify assignment
+        shell: bash
+        run: |
+          echo "Issue #${{ github.event.issue.number }} assigned to vseichter"
