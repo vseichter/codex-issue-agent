@@ -99,7 +99,7 @@ jobs:
           fi
 
           # always push to the correct branch
-          git push origin "$branch"
+          git push origin
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
