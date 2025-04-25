@@ -23,96 +23,147 @@ jobs:
           persist-credentials: true
           ref: ${{ github.event.repository.default_branch }}
 
+      - name: Log env after checkout
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "### After checkout ###"
+          echo "Date: $(date)"
+          echo "GitHub event: $GITHUB_EVENT_NAME"
+          echo "Working dir: $(pwd)"
+          echo "Directory listing:"
+          ls -alh
+          echo "Git remotes:"
+          git remote -v
+
       - name: Setup Node.js (>=20)
         uses: actions/setup-node@v3
         with:
           node-version: '>=20'
 
       - name: Install OpenAI Codex CLI
-        run: npm install -g @openai/codex
-      
-      - name: Print file contents
+        shell: bash
         run: |
-          echo "Contents of the current directory:"
-          ls -la
-          echo "Contents of the tests/unit directory:"
-          ls -la tests/unit || echo "tests/unit directory does not exist"
+          set -euxo pipefail
+          echo "### Installing Codex CLI ###"
+          npm install -g @openai/codex
+          echo "Codex version: $(codex --version || echo 'not installed')"
 
       - name: Export OpenAI API Key
-        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
         shell: bash
+        run: |
+          set -euxo pipefail
+          echo "### Exporting OpenAI key ###"
+          echo "OPENAI_API_KEY='***'"
+          echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
 
       - name: Determine branch name
         id: derive_branch
         shell: bash
         run: |
+          set -euxo pipefail
+          echo "### Determining branch name ###"
+          echo "Issue title: '${{ github.event.issue.title }}'"
+          echo "Issue number: ${{ github.event.issue.number }}"
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
           sanitized=$(echo "$title" \
             | tr '[:upper:]' '[:lower:]' \
             | sed -E 's/[^a-z0-9]+/-/g' \
             | sed -E 's/^-+|-+$//g')
-          echo "branch=issue-${num}-${sanitized}" >> "$GITHUB_OUTPUT"
+          branch="issue-${num}-${sanitized}"
+          echo "Derived branch: $branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "### derive_branch complete at $(date) ###"
 
       - name: Checkout or create branch
         shell: bash
         run: |
+          set -euxo pipefail
+          echo "### Checkout or create branch ###"
           branch="${{ steps.derive_branch.outputs.branch }}"
-      
-          # Configure git to use the GitHub Actions bot identity
+          echo "Input branch: $branch"
+          echo "Git remotes before:"
+          git remote -v
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      
-          # Rewrite origin to use the GITHUB_TOKEN for all pushes/fetches
+          echo "Git config set to:"
+          git config user.name
+          git config user.email
+          echo "Updating origin URL to use GITHUB_TOKEN"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-      
-          # If the branch exists remotely, fetch & switch; if locally, switch; else create it
+          echo "Git remotes after update:"
+          git remote -v
           if git ls-remote --exit-code --heads origin "$branch"; then
+            echo "Branch '$branch' exists on origin"
             git fetch origin "$branch"
+            echo "Remote branches:"
+            git branch -a
             git switch "$branch"
+            echo "Switched to remote branch: $(git branch --show-current)"
           elif git show-ref --verify --quiet "refs/heads/$branch"; then
+            echo "Branch '$branch' exists locally"
             git switch "$branch"
+            echo "Switched to local branch: $(git branch --show-current)"
           else
+            echo "Creating new branch '$branch'"
             git switch -c "$branch"
+            echo "New branch created: $(git branch --show-current)"
           fi
-      
-          # Push the new branch (only if it wasn’t already on origin)
+          echo "Checking if branch needs pushing"
           if ! git ls-remote --exit-code --heads origin "$branch"; then
+            echo "Pushing branch '$branch' to origin"
             git push -u origin "$branch"
+          else
+            echo "Branch '$branch' already on origin; not pushing"
           fi
-        
+          echo "Final local branches:"
+          git branch
+          echo "Final HEAD:"
+          git rev-parse HEAD
+          echo "### Checkout or create branch complete at $(date) ###"
 
       - name: Add placeholder test file
         shell: bash
         run: |
+          set -euxo pipefail
+          echo "### Adding placeholder test file ###"
+          echo "Current dir: $(pwd)"
           mkdir -p tests/unit
+          echo "Created directory tests/unit"
           cat << 'EOF' > tests/unit/test_placeholder.py
           import pytest
 
           def test_placeholder():
               assert True
           EOF
+          echo "Test file content:"
+          sed -n '1,10p' tests/unit/test_placeholder.py
+          echo "### Add placeholder complete at $(date) ###"
 
       - name: Commit & push placeholder test
         shell: bash
         run: |
-          # ①  Get the branch name for this step
+          set -euxo pipefail
+          echo "### Commit & push placeholder test ###"
           branch="${{ steps.derive_branch.outputs.branch }}"
-
-          # ②  Stage and commit (only if there’s something new)
+          echo "On branch: $(git branch --show-current)"
+          echo "Git status before add:"
+          git status
           git add -A
+          echo "Git status after staging:"
+          git diff --cached
           if git diff --cached --quiet; then
-            echo "⚠️  No changes to commit"
-            # still capture the current HEAD in case the commit already exists
+            echo "⚠️ No changes to commit"
           else
+            echo "Committing changes"
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
-
-          # ③  Capture the commit SHA we want the branch to point at
           sha=$(git rev-parse HEAD)
-
-          # ④  Move (or create) the remote branch ref so it points at that SHA
+          echo "Local HEAD SHA: $sha"
+          echo "Pushing SHA to origin branch '$branch'"
           git push origin "$sha":refs/heads/"$branch" --force
+          echo "### Commit & push complete at $(date) ###"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
@@ -127,4 +178,6 @@ jobs:
       - name: Notify assignment
         shell: bash
         run: |
-          echo "Issue #${{ github.event.issue.number }} assigned to vseichter"
+          set -euxo pipefail
+          echo "### Notify assignment ###"
+          echo "Issue #${{ github.event.issue.number }} assigned to vseichter at $(date)"
