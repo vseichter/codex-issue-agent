@@ -108,12 +108,33 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.commit-changes.outputs.branch }}
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
+      - name: Create Pull Request via API
+        uses: actions/github-script@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ needs.commit-changes.outputs.branch }}
-          title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
-          body: |
-            Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-          base: main
+          script: |
+            const branch = '${{ needs.commit-changes.outputs.branch }}';
+            const title = `chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}`;
+            const body = `Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}`;
+            // Check for existing open PR for this branch
+            const existing = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${branch}`,
+              base: 'main',
+              state: 'open'
+            });
+            if (existing.data.length > 0) {
+              console.log(`Pull request already exists: ${existing.data[0].html_url}`);
+            } else {
+              const pr = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                head: branch,
+                base: 'main',
+                body
+              });
+              console.log(`Created pull request: ${pr.data.html_url}`);
+            }
