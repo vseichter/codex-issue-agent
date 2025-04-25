@@ -11,31 +11,53 @@ on:
 
 jobs:
   create-branch-and-pr:
-    # …on:, permissions:, etc. unchanged …
+    if: ${{ github.event.assignee.login == 'vseichter' }}
+    runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣  Normal checkout of the repo (no ref yet)
-      - uses: actions/checkout@v3
+      # Checkout the default branch with full history
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v3
         with:
-          fetch-depth: 0        # full history
+          fetch-depth: 0
           persist-credentials: true
 
-      # 2️⃣  Derive the branch name
-      - id: derive_branch
+      - name: Setup Node.js (>=20)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '>=20'
+
+      - name: Install OpenAI Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Export OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Determine branch name
+        id: derive_branch
+        shell: bash
         run: |
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
-          sanitized=$(echo "$title" | tr '[:upper:]' '[:lower:]' \
-                       | sed -E 's/[^a-z0-9]+/-/g' \
-                       | sed -E 's/^-+|-+$//g')
+          sanitized=$(echo "$title" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g' \
+            | sed -E 's/^-+|-+$//g')
           echo "branch=issue-${num}-${sanitized}" >> "$GITHUB_OUTPUT"
 
-      # 3️⃣  Create or switch to that branch
       - name: Checkout or create branch
+        shell: bash
         run: |
-          branch=${{ steps.derive_branch.outputs.branch }}
-          git fetch origin "$branch" || true
-          if git show-ref --verify --quiet refs/heads/$branch; then
+          branch="${{ steps.derive_branch.outputs.branch }}"
+          git config user.name "Vincent Seichter"
+          git config user.email "vseichter@users.noreply.github.com"
+
+          # If the branch already exists remotely, fetch it; otherwise create it
+          if git ls-remote --exit-code --heads origin "$branch"; then
+            git fetch origin "$branch"
+            git switch "$branch"
+          elif git show-ref --verify --quiet "refs/heads/$branch"; then
             git switch "$branch"
           else
             git switch -c "$branch"
@@ -53,29 +75,16 @@ jobs:
               assert True
           EOF
 
-      - name: Debug git status & branch
-        shell: bash
-        run: |
-          echo "On branch: $(git rev-parse --abbrev-ref HEAD)"
-          git status
-
       - name: Commit & push placeholder test
         shell: bash
         run: |
-          branch="${{ steps.derive_branch.outputs.branch }}"
-          git checkout "$branch"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add -A
           if git diff --cached --quiet; then
-            echo "⚠️ No changes to commit"
+            echo "⚠️  No changes to commit"
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
+            git push
           fi
-
-          # always push to the correct branch
-          git push origin
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
