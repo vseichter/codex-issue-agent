@@ -68,14 +68,30 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
-      - name: Debug branch & commit SHAs
+      - name: Debug remotes & branches
         shell: bash
         run: |
-          branch="${{ steps.create_branch.outputs.branch }}"
-          echo "On branch: $(git rev-parse --abbrev-ref HEAD)"
-          echo "Local HEAD:  $(git rev-parse HEAD)"
-          echo "Remote HEAD:"
-          git ls-remote origin "refs/heads/$branch"
+          echo "=== remotes ==="
+          git remote -v
+
+          echo
+          echo "=== local branches ==="
+          git branch -vv
+
+          echo
+          echo "=== remote branches (origin) ==="
+          git ls-remote --heads origin
+
+      - name: Debug working tree & HEAD
+        shell: bash
+        run: |
+          echo "=== current branch & HEAD ==="
+          git rev-parse --abbrev-ref HEAD
+          git show --stat HEAD
+
+          echo
+          echo "=== working tree files ==="
+          ls -R .
 
       - name: Commit Codex CLI changes
         shell: bash
@@ -89,7 +105,7 @@ jobs:
             echo "⚠️ No changes to commit"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
-            # explicitly push HEAD to the named branch on origin
+            # push explicitly
             git push origin HEAD:"${{ steps.create_branch.outputs.branch }}"
           fi
 
