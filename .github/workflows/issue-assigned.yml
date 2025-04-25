@@ -10,19 +10,25 @@ on:
     types: [assigned]
 
 jobs:
-  create-branch:
-    name: Create issue branch
+  notify-on-assignment:
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
-    outputs:
-      branch: ${{ steps.branch.outputs.branch }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+      - name: Setup Node.js (>=20)
+        uses: actions/setup-node@v3
         with:
-          fetch-depth: 0
-      - name: Create or checkout branch
-        id: branch
+          # Install Node.js version 20 or greater
+          node-version: '>=20'
+      - name: Install OpenAI Codex CLI
+        run: npm install -g @openai/codex
+      - name: Set OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Create and push branch for issue
+        id: create_branch
         run: |
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
@@ -33,72 +39,44 @@ jobs:
           branch="issue-${num}-${sanitized}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --heads origin "$branch" | grep -q "$branch"; then
-            git fetch origin "$branch":"$branch"
-            git checkout "$branch"
-          else
-            git checkout -b "$branch"
-            git push -u origin "$branch"
-          fi
+          git checkout -b "$branch"
+          git push -u origin "$branch"
+          # Output branch name for PR action
           echo "branch=$branch" >> $GITHUB_OUTPUT
-
-  run-codex:
-    name: Run Codex CLI
-    needs: create-branch
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout issue branch
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.create-branch.outputs.branch }}
-      - name: Setup Node.js (>=20)
-        uses: actions/setup-node@v3
-        with:
-          node-version: '>=20'
-      - name: Install OpenAI Codex CLI
-        run: npm install -g @openai/codex
-      - name: Set OpenAI API Key
-        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
         shell: bash
-      - name: Generate edits with Codex
+      - name: Run Codex CLI in full-auto mode with issue description
         run: |
           num="${{ github.event.issue.number }}"
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
+          # Run in full-auto and quiet (non-interactive) mode to avoid raw-mode errors
           codex --full-auto --quiet "$prompt"
         shell: bash
-      - name: Commit and push changes
+      - name: Commit Codex CLI changes
         run: |
+          # Configure Git author
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Stage all changes
           git add .
-          # Create an empty commit if no changes to ensure PR can be created
+          # Commit if there are changes
           if git diff-index --quiet HEAD; then
-            git commit --allow-empty -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
+            echo "No changes to commit"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
+            git push
           fi
-          git push
         shell: bash
-
-  create-pr:
-    name: Create Pull Request
-    needs: [create-branch, run-codex]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.create-branch.outputs.branch }}
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ needs.create-branch.outputs.branch }}
+          branch: ${{ steps.create_branch.outputs.branch }}
           title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
+      - name: Notify that 'vseichter' was assigned
+        run: |
+          echo "Issue #${{ github.event.issue.number }} - '${{ github.event.issue.title }}' was assigned to vseichter"
