@@ -52,17 +52,7 @@ jobs:
                 sha: baseRef.object.sha
               });
             }
-      - name: Setup Node.js (>=20)
-        uses: actions/setup-node@v3
-        with:
-          node-version: '>=20'
 
-      - name: Install OpenAI Codex CLI
-        run: npm install -g @openai/codex
-
-      - name: Set OpenAI API Key
-        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
-        shell: bash
       - name: Run Codex CLI in full-auto mode with issue description
         run: |
           num="${{ github.event.issue.number }}"
@@ -71,6 +61,18 @@ jobs:
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
         shell: bash
+
+      - name: Comment on the issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Issue #${context.issue.number} assigned to vseichter at ${new Date().toISOString()}`
+            });
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
         with:
@@ -86,4 +88,16 @@ jobs:
               base,
               title: `chore: add placeholder test for issue #${issueNumber}`,
               body: `Automated PR to add placeholder test for issue #${issueNumber}: ${{ github.event.issue.title }}`
+            });
+
+      - name: Comment on the issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Issue #${context.issue.number} assigned to vseichter at ${new Date().toISOString()}`
             });
