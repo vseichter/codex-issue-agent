@@ -52,16 +52,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # if exists locally
           if git rev-parse --verify --quiet "$branch"; then
             git checkout "$branch"
-
-          # else if exists on origin → track it
           elif git ls-remote --exit-code --heads origin "$branch"; then
             git fetch origin "$branch"
             git checkout --track origin/"$branch"
-
-          # else create, track & push
           else
             git checkout -b "$branch"
             git push -u origin "$branch"
@@ -78,29 +73,33 @@ jobs:
               assert True
           EOF
 
-      - name: Debug git status & branch
-        shell: bash
-        run: |
-          echo "On branch: $(git rev-parse --abbrev-ref HEAD)"
-          git status
-
-      - name: Commit & push placeholder test
+      - name: Commit changes & capture SHA
+        id: commit
         shell: bash
         run: |
           branch="${{ steps.derive_branch.outputs.branch }}"
-          git checkout "$branch"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add -A
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
+          # Capture the commit SHA (even if unchanged, will be HEAD)
+          sha=$(git rev-parse HEAD)
+          echo "commit_sha=$sha" >> $GITHUB_OUTPUT
 
-          # always push to the correct branch
-          git push origin
+      - name: Update branch reference via REST API
+        uses: octokit/request-action@v2.x
+        with:
+          route: PATCH /repos/{owner}/{repo}/git/refs/{ref}
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          ref: heads/${{ steps.derive_branch.outputs.branch }}
+          sha: ${{ steps.commit.outputs.commit_sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
