@@ -83,7 +83,7 @@ jobs:
             echo "⚠️  No changes to commit"
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
-            git push
+            git push origin HEAD:${{ steps.derive_branch.outputs.branch }}
           fi
 
       - name: Create Pull Request
