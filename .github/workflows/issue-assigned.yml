@@ -165,14 +165,19 @@ jobs:
           git push origin "$sha":refs/heads/"$branch" --force
           echo "### Commit & push complete at $(date) ###"
 
-      - name: Debug What’s origin/issue-1-test-issue-for-codex?
+      - name: Debug What’s origin/issue branch?
         shell: bash
         run: |
           set -euxo pipefail
-          git remote set-url origin \
-            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          echo "Remote HEAD for ${ { steps.derive_branch.outputs.branch } }:"
-          git ls-remote origin refs/heads/${{ steps.derive_branch.outputs.branch }}
+      
+          # rewrite origin to use the token
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+      
+          # bring the branch name into bash
+          branch=${{ steps.derive_branch.outputs.branch }}
+          echo "Remote HEAD for $branch:"
+          git ls-remote origin refs/heads/"$branch"
+        
         
 
       - name: Create Pull Request
