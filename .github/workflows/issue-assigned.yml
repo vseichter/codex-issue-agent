@@ -87,17 +87,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage everything
           git add -A
 
-          # Commit if there are staged changes
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           fi
 
-          # Force-push HEAD to update the remote branch ref
           git push --force --verbose origin "HEAD:$branch"
 
       - name: Create Pull Request
