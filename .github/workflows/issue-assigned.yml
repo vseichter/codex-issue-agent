@@ -98,19 +98,22 @@ jobs:
         run: |
           branch="${{ steps.create_branch.outputs.branch }}"
 
-          # configure bot
+          # configure bot identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # stage absolutely everything
           git add -A
 
-          # commit or no-op
-          git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}" \
-            || echo "⚠️ No changes to commit"
+          # commit if there are changes, otherwise note that nothing changed
+          if git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"; then
+            echo "✅ Committed Codex changes"
+          else
+            echo "⚠️ No changes to commit"
+          fi
 
-          # push your local branch to the remote branch (updates the branch ref)
-          git push origin "$branch":"$branch""
+          # push your local branch up to the same remote branch
+          git push origin "$branch":"$branch"
 
 
       - name: Create Pull Request
