@@ -29,6 +29,13 @@ jobs:
 
       - name: Install OpenAI Codex CLI
         run: npm install -g @openai/codex
+      
+      - name: Print file contents
+        run: |
+          echo "Contents of the current directory:"
+          ls -la
+          echo "Contents of the tests/unit directory:"
+          ls -la tests/unit || echo "tests/unit directory does not exist"
 
       - name: Export OpenAI API Key
         run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
