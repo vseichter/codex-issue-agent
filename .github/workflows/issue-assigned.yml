@@ -53,46 +53,14 @@ jobs:
               });
             }
 
-      - name: Add placeholder test via REST API
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          script: |
-            const { owner, repo } = context.repo;
-            const branch = '${{ steps.derive_branch.outputs.branch }}';
-            const issueNumber = context.payload.issue.number;
-
-            const filePath = 'tests/unit/test_placeholder.py';
-            const content = `# tests/unit/test_placeholder.py
-            # A basic pytest test suite
-
-            import pytest
-
-            def test_true_is_truthy():
-                assert True, "True should be truthy"
-
-            def test_sample_math():
-                assert 1 + 1 == 2, "Basic arithmetic should work"
-
-            @pytest.mark.parametrize("input,expected", [
-                (0, 0),
-                (1, 1),
-                (2, 4),
-                (3, 9),
-            ])
-            def test_square(input, expected):
-                def square(x):
-                    return x * x
-                assert square(input) == expected
-            `;
-                        await github.rest.repos.createOrUpdateFileContents({
-                          owner, repo,
-                          path: filePath,
-                          message: `chore: add placeholder test for issue #${issueNumber}`,
-                          content: Buffer.from(content).toString('base64'),
-                          branch
-                        });
-
+      - name: Run Codex CLI in full-auto mode with issue description
+        run: |
+          num="${{ github.event.issue.number }}"
+          title="${{ github.event.issue.title }}"
+          body="${{ github.event.issue.body }}"
+          prompt="Issue #${num}: ${title}\n\n${body}"
+          codex --full-auto --quiet "$prompt"
+        shell: bash
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
         with:
@@ -108,16 +76,4 @@ jobs:
               base,
               title: `chore: add placeholder test for issue #${issueNumber}`,
               body: `Automated PR to add placeholder test for issue #${issueNumber}: ${{ github.event.issue.title }}`
-            });
-
-      - name: Comment on the issue
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Issue #${context.issue.number} assigned to vseichter at ${new Date().toISOString()}`
             });
