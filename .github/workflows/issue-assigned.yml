@@ -116,5 +116,3 @@ jobs:
             Automated PR to add placeholder test for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
 
-      - name: Notify assignment
-        run: echo "Issue #${{ github.event.issue.number }} assigned to vseichter"
