@@ -68,7 +68,7 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
-            - name: Commit Codex CLI changes
+      - name: Commit Codex CLI changes
         shell: bash
         run: |
           # configure bot identity
