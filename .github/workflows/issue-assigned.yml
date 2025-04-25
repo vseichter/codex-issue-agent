@@ -34,11 +34,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git ls-remote --heads origin "$branch" | grep -q "$branch"; then
-            echo "Branch '$branch' exists. Fetching and checking out."
             git fetch origin "$branch":"$branch"
             git checkout "$branch"
           else
-            echo "Branch '$branch' does not exist. Creating."
             git checkout -b "$branch"
             git push -u origin "$branch"
           fi
@@ -71,29 +69,16 @@ jobs:
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
         shell: bash
-
-  commit-changes:
-    name: Commit Codex CLI changes
-    needs: [run-codex, create-branch]
-    outputs:
-      branch: ${{ needs.create-branch.outputs.branch }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout issue branch
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.create-branch.outputs.branch }}
-      - name: Commit and push changes (including empty commit if no changes)
+      - name: Commit and push changes (including trigger file)
         run: |
           # Determine target branch
           branch="${{ needs.create-branch.outputs.branch }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          # Create an empty commit if no changes to ensure branch advances
+          # Create an empty commit if no content changes (trigger file ensures diff)
           if git diff-index --quiet HEAD; then
-            echo "No changes detected; creating an empty commit to trigger PR"
+            echo "No code changes detected; creating an empty commit with trigger file update"
             git commit --allow-empty -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
@@ -104,19 +89,19 @@ jobs:
 
   create-pr:
     name: Create Pull Request
-    needs: commit-changes
+    needs: [create-branch, run-codex]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: ${{ needs.commit-changes.outputs.branch }}
+          ref: ${{ needs.create-branch.outputs.branch }}
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ needs.commit-changes.outputs.branch }}
+          branch: ${{ needs.create-branch.outputs.branch }}
           title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
