@@ -71,19 +71,18 @@ jobs:
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # only commit if there are changes
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add .
+            git commit -m "chore: codex updates for issue #${{ github.event.issue.number }}"
+            git push origin ${{ steps.derive_branch.outputs.branch }}
+          fi
         shell: bash
 
-      - name: Comment on the issue
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Issue #${context.issue.number} assigned to vseichter at ${new Date().toISOString()}`
-            });
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
         with:
