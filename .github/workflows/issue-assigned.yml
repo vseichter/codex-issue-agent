@@ -10,7 +10,7 @@ on:
     types: [assigned]
 
 jobs:
-  notify-on-assignment:
+  create-branch-and-pr:
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
     steps:
