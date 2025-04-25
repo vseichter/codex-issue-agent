@@ -68,18 +68,24 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
-      - name: Commit Codex CLI changes
+            - name: Commit Codex CLI changes
+        shell: bash
         run: |
+          # configure bot identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # stage everything
           git add .
-          if git diff-index --quiet HEAD; then
+
+          # if there's something staged, commit & push; otherwise skip
+          if git diff --cached --quiet; then
             echo "No changes to commit"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
             git push
           fi
-        shell: bash
+
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
