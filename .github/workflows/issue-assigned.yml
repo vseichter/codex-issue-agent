@@ -68,22 +68,29 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
+      - name: Debug branch & commit SHAs
+        shell: bash
+        run: |
+          branch="${{ steps.create_branch.outputs.branch }}"
+          echo "On branch: $(git rev-parse --abbrev-ref HEAD)"
+          echo "Local HEAD:  $(git rev-parse HEAD)"
+          echo "Remote HEAD:"
+          git ls-remote origin "refs/heads/$branch"
+
       - name: Commit Codex CLI changes
         shell: bash
         run: |
-          # configure bot identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # stage everything
           git add .
 
-          # if there's something staged, commit & push; otherwise skip
           if git diff --cached --quiet; then
-            echo "No changes to commit"
+            echo "⚠️ No changes to commit"
           else
             git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
-            git push
+            # explicitly push HEAD to the named branch on origin
+            git push origin HEAD:"${{ steps.create_branch.outputs.branch }}"
           fi
 
 
@@ -96,8 +103,3 @@ jobs:
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
-
-      - name: Notify that 'vseichter' was assigned
-        run: |
-          echo "Issue #${{ github.event.issue.number }} - '${{ github.event.issue.title }}' was assigned to vseichter"
-        shell: bash
