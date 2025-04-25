@@ -28,6 +28,7 @@ jobs:
         shell: bash
 
       - name: Create and push branch for issue
+        id: create_branch
         run: |
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
@@ -40,6 +41,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           git push -u origin "$branch"
+          # Output branch name for PR action
+          echo "branch=$branch" >> $GITHUB_OUTPUT
         shell: bash
       - name: Run Codex CLI in full-auto mode with issue description
         run: |
@@ -69,6 +72,7 @@ jobs:
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.create_branch.outputs.branch }}
           title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
