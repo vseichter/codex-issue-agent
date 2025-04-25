@@ -15,11 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository (full history)
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          persist-credentials: true
+     
 
       - name: Setup Node.js (>=20)
         uses: actions/setup-node@v3
@@ -44,19 +40,29 @@ jobs:
             | sed -E 's/[^a-z0-9]+/-/g' \
             | sed -E 's/^-+|-+$//g')
           echo "branch=issue-${num}-${sanitized}" >> $GITHUB_OUTPUT
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.derive_branch.outputs.branch }}
+          fetch-depth: 0
 
       - name: Checkout or create branch
         shell: bash
         run: |
           branch="${{ steps.derive_branch.outputs.branch }}"
-          git config user.name "vseichter"
-          git config user.email "vseichter@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # if exists locally
           if git rev-parse --verify --quiet "$branch"; then
             git checkout "$branch"
+
+          # else if exists on origin → track it
           elif git ls-remote --exit-code --heads origin "$branch"; then
             git fetch origin "$branch"
             git checkout --track origin/"$branch"
+
+          # else create, track & push
           else
             git checkout -b "$branch"
             git push -u origin "$branch"
@@ -73,38 +79,29 @@ jobs:
               assert True
           EOF
 
-      - name: Commit changes & capture SHA
-        id: commit
+      - name: Debug git status & branch
         shell: bash
         run: |
-          git config user.name "vseichter"
-          git config user.email "vseichter@users.noreply.github.com"
+          echo "On branch: $(git rev-parse --abbrev-ref HEAD)"
+          git status
+
+      - name: Commit & push placeholder test
+        shell: bash
+        run: |
+          branch="${{ steps.derive_branch.outputs.branch }}"
+          git checkout "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add -A
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
-          echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Push branch to origin
-        run: git push origin "${{ steps.derive_branch.outputs.branch }}"
-
-      - name: Update branch ref via REST API
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const branch = `${{ steps.derive_branch.outputs.branch }}`;
-            const sha = `${{ steps.commit.outputs.commit_sha }}`;
-            await github.rest.git.updateRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `heads/${branch}`,
-              sha: sha,
-              force: true
-            });
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # always push to the correct branch
+          git push origin
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
@@ -116,3 +113,7 @@ jobs:
             Automated PR to add placeholder test for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
 
+      - name: Notify assignment
+        shell: bash
+        run: |
+          echo "Issue #${{ github.event.issue.number }} assigned to vseichter"
