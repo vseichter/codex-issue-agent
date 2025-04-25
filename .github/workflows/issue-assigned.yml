@@ -84,6 +84,7 @@ jobs:
         shell: bash
         run: |
           branch="${{ steps.derive_branch.outputs.branch }}"
+          echo "Committing changes to branch: $branch"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
