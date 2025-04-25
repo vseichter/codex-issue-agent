@@ -64,13 +64,16 @@ jobs:
             git push -u origin "$branch"
           fi
 
-      - name: Run Codex CLI on issue
+      - name: Add placeholder test file
         shell: bash
         run: |
-          num="${{ github.event.issue.number }}"
-          title="${{ github.event.issue.title }}"
-          body="${{ github.event.issue.body }}"
-          codex --full-auto --quiet "Issue #${num}: ${title}\n\n${body}"
+          mkdir -p tests/unit
+          cat << 'EOF' > tests/unit/test_placeholder.py
+          import pytest
+
+          def test_placeholder():
+              assert True
+          EOF
 
       - name: Debug git status & diff
         shell: bash
@@ -93,7 +96,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
           else
-            git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
+            git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
 
           git push --force --verbose origin "HEAD:$branch"
@@ -103,9 +106,9 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ steps.derive_branch.outputs.branch }}
-          title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
+          title: "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           body: |
-            Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+            Automated PR to add placeholder test for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
 
       - name: Notify assignment
