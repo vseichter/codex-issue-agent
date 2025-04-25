@@ -73,7 +73,9 @@ jobs:
 
   commit-changes:
     name: Commit Codex CLI changes
-    needs: run-codex
+    needs: [run-codex, create-branch]
+    outputs:
+      branch: ${{ needs.create-branch.outputs.branch }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout issue branch
@@ -99,11 +101,16 @@ jobs:
     needs: commit-changes
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.commit-changes.outputs.branch }}
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ needs.create-branch.outputs.branch }}
+          branch: ${{ needs.commit-changes.outputs.branch }}
           title: "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
