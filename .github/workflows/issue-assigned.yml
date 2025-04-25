@@ -71,19 +71,10 @@ jobs:
         shell: bash
       - name: Commit and push changes (including trigger file)
         run: |
-          # Determine target branch
-          branch="${{ needs.create-branch.outputs.branch }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          # Create an empty commit if no content changes (trigger file ensures diff)
-          if git diff-index --quiet HEAD; then
-            echo "No code changes detected; creating an empty commit with trigger file update"
-            git commit --allow-empty -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
-          else
-            git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
-          fi
-          # Push explicitly to the issue branch
+          git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
           git push origin HEAD:"$branch"
         shell: bash
 
