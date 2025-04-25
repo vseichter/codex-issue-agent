@@ -1,5 +1,10 @@
 name: Issue Assigned to vseichter
 
+permissions:
+  contents: write    # allow pushing commits and branches
+  pull-requests: write  # allow creating pull requests
+  issues: write      # allow updating issues if needed
+
 on:
   issues:
     types: [assigned]
