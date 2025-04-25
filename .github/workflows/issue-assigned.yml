@@ -111,15 +111,21 @@ jobs:
           set -euxo pipefail
           branch="${{ steps.derive_branch.outputs.branch }}"
           echo "On branch: $(git branch --show-current)"
+          # Stage all changes
           git add -A
+          echo "Git status after staging:" && git status
+          # Commit only if there are changes
           if git diff --cached --quiet; then
-            echo "ERROR: no changes to commit"
-            exit 1
+            echo "ℹ️  No new changes to commit, using existing HEAD"
           else
+            echo "🔨 Committing changes for placeholder test"
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
+          # Capture the current HEAD SHA (new or existing)
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> $GITHUB_OUTPUT
+          # Push branch to update refs
+          echo "🚀 Pushing branch $branch to origin"
           git push origin "$branch"
 
       - name: Force attach commit via GitHub API
