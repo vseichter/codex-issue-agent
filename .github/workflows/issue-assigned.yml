@@ -99,15 +99,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add .
+          # stage absolutely everything: new, modified, deleted
+          git add -A
 
-          if git diff --cached --quiet; then
-            echo "⚠️ No changes to commit"
-          else
-            git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
-            # push explicitly
-            git push origin HEAD:"${{ steps.create_branch.outputs.branch }}"
-          fi
+          # either commit or print "nothing to commit"
+          git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}" \
+            || echo "⚠️ No changes to commit"
+
+          # force-push current HEAD up to the feature branch
+          git push origin HEAD:"${{ steps.create_branch.outputs.branch }}"
 
 
       - name: Create Pull Request
