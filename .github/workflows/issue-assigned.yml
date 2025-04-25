@@ -83,7 +83,9 @@ jobs:
             echo "⚠️  No changes to commit"
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
-            git push origin HEAD:${{ steps.derive_branch.outputs.branch }}
+            # ✨ NEW: get commit SHA and point the branch ref at it
+            sha=$(git rev-parse HEAD)
+            git push origin "$sha":refs/heads/"$branch"
           fi
 
       - name: Create Pull Request
