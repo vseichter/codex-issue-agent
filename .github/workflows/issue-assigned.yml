@@ -66,21 +66,26 @@ jobs:
 
       - name: Run Codex CLI in full-auto mode with issue description
         run: |
+          const { owner, repo } = context.repo;
+          const branch = '${{ steps.derive_branch.outputs.branch }}';
+          const issueNumber = context.payload.issue.number;
+
+          const filePath = 'tests/unit/test_placeholder.py';
+          const content = `# tests/unit/test_placeholder.py
+          
           num="${{ github.event.issue.number }}"
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # only commit if there are changes
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
-            git add .
-            git commit -m "chore: codex updates for issue #${{ github.event.issue.number }}"
-            git push origin ${{ steps.derive_branch.outputs.branch }}
-          fi
+
+          await github.rest.repos.createOrUpdateFileContents({
+            owner, repo,
+            path: filePath,
+            message: `chore: add placeholder test for issue #${issueNumber}`,
+            content: Buffer.from(content).toString('base64'),
+            branch
+          });
         shell: bash
 
       - name: Open Pull Request via REST API
