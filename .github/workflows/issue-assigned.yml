@@ -47,7 +47,8 @@ jobs:
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
-          codex --full-auto "$prompt"
+          # Run in full-auto and quiet (non-interactive) mode to avoid raw-mode errors
+          codex --full-auto --quiet "$prompt"
         shell: bash
       - name: Commit Codex CLI changes
         run: |
