@@ -78,16 +78,24 @@ jobs:
       - name: Commit & push placeholder test
         shell: bash
         run: |
+          # ①  Get the branch name for this step
+          branch="${{ steps.derive_branch.outputs.branch }}"
+
+          # ②  Stage and commit (only if there’s something new)
           git add -A
           if git diff --cached --quiet; then
             echo "⚠️  No changes to commit"
+            # still capture the current HEAD in case the commit already exists
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
-            # ✨ NEW: get commit SHA and point the branch ref at it
-            sha=$(git rev-parse HEAD)
-            git push origin "$sha":refs/heads/"$branch"
           fi
 
+          # ③  Capture the commit SHA we want the branch to point at
+          sha=$(git rev-parse HEAD)
+
+          # ④  Move (or create) the remote branch ref so it points at that SHA
+          git push origin "$sha":refs/heads/"$branch"
+          
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
