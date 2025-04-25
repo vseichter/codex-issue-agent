@@ -93,21 +93,24 @@ jobs:
           echo "=== working tree files ==="
           ls -R .
 
-      - name: Commit Codex CLI changes
+      - name: Commit & push Codex CLI changes
         shell: bash
         run: |
+          branch="${{ steps.create_branch.outputs.branch }}"
+
+          # configure bot
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # stage absolutely everything: new, modified, deleted
+          # stage absolutely everything
           git add -A
 
-          # either commit or print "nothing to commit"
+          # commit or no-op
           git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}" \
             || echo "⚠️ No changes to commit"
 
-          # force-push current HEAD up to the feature branch
-          git push origin HEAD:"${{ steps.create_branch.outputs.branch }}"
+          # push your local branch to the remote branch (updates the branch ref)
+          git push origin "$branch":"$branch""
 
 
       - name: Create Pull Request
