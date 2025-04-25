@@ -13,6 +13,7 @@ jobs:
   create-branch-and-pr:
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository (full history)
         uses: actions/checkout@v3
@@ -51,15 +52,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # if exists locally
           if git rev-parse --verify --quiet "$branch"; then
-            echo "✅ Checking out existing local branch $branch"
             git checkout "$branch"
+
+          # else if exists on origin → track it
           elif git ls-remote --exit-code --heads origin "$branch"; then
-            echo "✅ Fetching & checking out remote branch $branch"
             git fetch origin "$branch"
-            git checkout -b "$branch" origin/"$branch"
+            git checkout --track origin/"$branch"
+
+          # else create, track & push
           else
-            echo "🆕 Creating & pushing new branch $branch"
             git checkout -b "$branch"
             git push -u origin "$branch"
           fi
@@ -75,31 +78,28 @@ jobs:
               assert True
           EOF
 
-      - name: Debug git status & diff
+      - name: Debug git status & branch
         shell: bash
         run: |
           echo "On branch: $(git rev-parse --abbrev-ref HEAD)"
           git status
-          git diff
-          git diff --cached
 
-      - name: Commit & force-push Codex CLI changes
+      - name: Commit & push placeholder test
         shell: bash
         run: |
           branch="${{ steps.derive_branch.outputs.branch }}"
-          echo "Committing changes to branch: $branch"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add -A
-
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
           else
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
 
-          git push
+          # always push to the correct branch
+          git push origin "$branch"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
