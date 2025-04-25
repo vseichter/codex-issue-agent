@@ -14,6 +14,12 @@ jobs:
     if: ${{ github.event.assignee.login == 'vseichter' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
       - name: Setup Node.js (>=20)
         uses: actions/setup-node@v3
         with:
@@ -93,7 +99,7 @@ jobs:
             git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           fi
 
-          git push --force --verbose origin "HEAD:$branch"
+          git push
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
