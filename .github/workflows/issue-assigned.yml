@@ -2,6 +2,7 @@ name: Issue Assigned to vseichter
 
 permissions:
   contents: write        # allow pushing commits and branches
+  actions: read          # allow using the GitHub App token
   pull-requests: write   # allow creating pull requests
   issues: write          # allow updating issues if needed
 
@@ -15,12 +16,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the default branch with full history
+      # Create a GitHub App installation token for bypassing branch protection
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.VERSION_BUMPER_APPID }}
+          private-key: ${{ secrets.VERSION_BUMPER_SECRET }}
+
+      # Checkout the default branch using the GitHub App token
       - name: Checkout repository (full history)
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Log env after checkout
@@ -61,33 +71,30 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          echo "### Determining branch name ###"
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
           sanitized=$(echo "$title" \
             | tr '[:upper:]' '[:lower:]' \
             | sed -E 's/[^a-z0-9]+/-/g' \
             | sed -E 's/^-+|-+$//g')
-          branch="issue-${num}-${sanitized}"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "branch=issue-${num}-${sanitized}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout or create branch
         shell: bash
         run: |
           set -euxo pipefail
           branch="${{ steps.derive_branch.outputs.branch }}"
-          echo "### Checkout or create branch ($branch) ###"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          # Use GitHub App token for authentication
+          git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git
           if git ls-remote --exit-code --heads origin "$branch"; then
             git fetch origin "$branch"
-            git switch "$branch"
-          elif git show-ref --verify --quiet "refs/heads/$branch"; then
             git switch "$branch"
           else
             git switch -c "$branch"
           fi
+          # push if new
           if ! git ls-remote --exit-code --heads origin "$branch"; then
             git push -u origin "$branch"
           fi
@@ -107,7 +114,6 @@ jobs:
               assert True, "True should be truthy"
 
           def test_sample_math():
-              # A simple math test
               assert 1 + 1 == 2, "Basic arithmetic should work"
 
           @pytest.mark.parametrize("input,expected", [
@@ -117,56 +123,24 @@ jobs:
               (3, 9),
           ])
           def test_square(input, expected):
-              # Example function to square a number
               def square(x):
                   return x * x
               assert square(input) == expected
           EOF
 
       - name: Commit & push placeholder test
-        id: commit
-        shell: bash
-        run: |
-          set -euxo pipefail
-          branch="${{ steps.derive_branch.outputs.branch }}"
-          echo "On branch: $(git branch --show-current)"
-          # Stage all changes
-          git add -A
-          echo "Git status after staging:" && git status
-          # Commit only if there are changes
-          if git diff --cached --quiet; then
-            echo "ℹ️  No new changes to commit, using existing HEAD"
-          else
-            echo "🔨 Committing changes for placeholder test"
-            git commit -m "chore: add placeholder test for issue #${{ github.event.issue.number }}"
-          fi
-          # Capture the current HEAD SHA (new or existing)
-          sha=$(git rev-parse HEAD)
-          echo "sha=$sha" >> $GITHUB_OUTPUT
-          # Push branch to update refs
-          echo "🚀 Pushing branch $branch to origin"
-          git push origin "$branch"
-
-      - name: Force attach commit via GitHub API
-        uses: actions/github-script@v7
+        uses: EndBug/add-and-commit@v9
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const branch = '${{ steps.derive_branch.outputs.branch }}';
-            const sha    = '${{ steps.commit.outputs.sha }}';
-            console.log(`Attaching commit ${sha} to branch ${branch}`);
-            await github.rest.git.updateRef({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              ref:   `heads/${branch}`,
-              sha:   sha,
-              force: true,
-            });
+          add: 'tests/unit'
+          author_name: github-actions[bot]
+          author_email: 41898282+github-actions[bot]@users.noreply.github.com
+          message: 'chore: add placeholder test for issue #${{ github.event.issue.number }}'
+          push: true
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           branch: ${{ steps.derive_branch.outputs.branch }}
           title: "chore: add placeholder test for issue #${{ github.event.issue.number }}"
           body: |
