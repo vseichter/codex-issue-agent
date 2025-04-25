@@ -52,6 +52,17 @@ jobs:
                 sha: baseRef.object.sha
               });
             }
+      - name: Setup Node.js (>=20)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '>=20'
+
+      - name: Install OpenAI Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Set OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
+        shell: bash
 
       - name: Run Codex CLI in full-auto mode with issue description
         run: |
