@@ -19,7 +19,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Create and push branch
+        with:
+          fetch-depth: 0
+      - name: Create or checkout branch
         id: branch
         run: |
           title="${{ github.event.issue.title }}"
@@ -31,8 +33,15 @@ jobs:
           branch="issue-${num}-${sanitized}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git push -u origin "$branch"
+          if git ls-remote --heads origin "$branch" | grep -q "$branch"; then
+            echo "Branch '$branch' exists. Fetching and checking out."
+            git fetch origin "$branch":"$branch"
+            git checkout "$branch"
+          else
+            echo "Branch '$branch' does not exist. Creating."
+            git checkout -b "$branch"
+            git push -u origin "$branch"
+          fi
           echo "branch=$branch" >> $GITHUB_OUTPUT
 
   run-codex:
