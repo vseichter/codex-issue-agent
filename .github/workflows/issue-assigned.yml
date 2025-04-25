@@ -11,60 +11,34 @@ on:
 
 jobs:
   create-branch-and-pr:
-    if: ${{ github.event.assignee.login == 'vseichter' }}
-    runs-on: ubuntu-latest
+    # …on:, permissions:, etc. unchanged …
 
     steps:
-     
-
-      - name: Setup Node.js (>=20)
-        uses: actions/setup-node@v3
+      # 1️⃣  Normal checkout of the repo (no ref yet)
+      - uses: actions/checkout@v3
         with:
-          node-version: '>=20'
+          fetch-depth: 0        # full history
+          persist-credentials: true
 
-      - name: Install OpenAI Codex CLI
-        run: npm install -g @openai/codex
-
-      - name: Export OpenAI API Key
-        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
-        shell: bash
-
-      - name: Determine branch name
-        id: derive_branch
-        shell: bash
+      # 2️⃣  Derive the branch name
+      - id: derive_branch
         run: |
           title="${{ github.event.issue.title }}"
           num="${{ github.event.issue.number }}"
-          sanitized=$(echo "$title" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/[^a-z0-9]+/-/g' \
-            | sed -E 's/^-+|-+$//g')
-          echo "branch=issue-${num}-${sanitized}" >> $GITHUB_OUTPUT
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ steps.derive_branch.outputs.branch }}
-          fetch-depth: 0
+          sanitized=$(echo "$title" | tr '[:upper:]' '[:lower:]' \
+                       | sed -E 's/[^a-z0-9]+/-/g' \
+                       | sed -E 's/^-+|-+$//g')
+          echo "branch=issue-${num}-${sanitized}" >> "$GITHUB_OUTPUT"
 
+      # 3️⃣  Create or switch to that branch
       - name: Checkout or create branch
-        shell: bash
         run: |
-          branch="${{ steps.derive_branch.outputs.branch }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # if exists locally
-          if git rev-parse --verify --quiet "$branch"; then
-            git checkout "$branch"
-
-          # else if exists on origin → track it
-          elif git ls-remote --exit-code --heads origin "$branch"; then
-            git fetch origin "$branch"
-            git checkout --track origin/"$branch"
-
-          # else create, track & push
+          branch=${{ steps.derive_branch.outputs.branch }}
+          git fetch origin "$branch" || true
+          if git show-ref --verify --quiet refs/heads/$branch; then
+            git switch "$branch"
           else
-            git checkout -b "$branch"
+            git switch -c "$branch"
             git push -u origin "$branch"
           fi
 
