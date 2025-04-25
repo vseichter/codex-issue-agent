@@ -98,3 +98,4 @@ jobs:
           body: |
             Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
+          allow-empty: true
