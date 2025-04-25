@@ -21,6 +21,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Setup Node.js (>=20)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '>=20'
+
+      - name: Install OpenAI Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Export OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
+        shell: bash
+
       - name: Determine branch name
         id: derive_branch
         shell: bash
@@ -37,8 +49,8 @@ jobs:
         shell: bash
         run: |
           branch="${{ steps.derive_branch.outputs.branch }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "vseichter"
+          git config user.email "vseichter@users.noreply.github.com"
 
           if git rev-parse --verify --quiet "$branch"; then
             git checkout "$branch"
@@ -65,8 +77,8 @@ jobs:
         id: commit
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "vseichter"
+          git config user.email "vseichter@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
             echo "⚠️ No changes to commit"
@@ -104,3 +116,5 @@ jobs:
             Automated PR to add placeholder test for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
           base: main
 
+      - name: Notify assignment
+        run: echo "Issue #${{ github.event.issue.number }} assigned to vseichter"
