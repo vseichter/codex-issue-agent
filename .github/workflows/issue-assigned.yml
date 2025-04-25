@@ -1,0 +1,72 @@
+name: Issue Assigned to vseichter
+
+on:
+  issues:
+    types: [assigned]
+
+jobs:
+  notify-on-assignment:
+    if: ${{ github.event.assignee.login == 'vseichter' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Setup Node.js (>=20)
+        uses: actions/setup-node@v3
+        with:
+          # Install Node.js version 20 or greater
+          node-version: '>=20'
+      - name: Install OpenAI Codex CLI
+        run: npm install -g @openai/codex
+      - name: Set OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Create and push branch for issue
+        run: |
+          title="${{ github.event.issue.title }}"
+          num="${{ github.event.issue.number }}"
+          sanitized=$(echo "$title" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g' \
+            | sed -E 's/^-+|-+$//g')
+          branch="issue-${num}-${sanitized}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git push -u origin "$branch"
+        shell: bash
+      - name: Run Codex CLI in full-auto mode with issue description
+        run: |
+          num="${{ github.event.issue.number }}"
+          title="${{ github.event.issue.title }}"
+          body="${{ github.event.issue.body }}"
+          prompt="Issue #${num}: ${title}\n\n${body}"
+          codex --full-auto "$prompt"
+        shell: bash
+      - name: Commit Codex CLI changes
+        run: |
+          # Configure Git author
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Stage all changes
+          git add .
+          # Commit if there are changes
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}"
+            git push
+          fi
+        shell: bash
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.PR_TOKEN }}
+          title: chore: apply Codex CLI changes for issue #${{ github.event.issue.number }}
+          body: |
+            Automated PR to apply Codex CLI changes for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+          base: main
+      - name: Notify that 'vseichter' was assigned
+        run: |
+          echo "Issue #${{ github.event.issue.number }} - '${{ github.event.issue.title }}' was assigned to vseichter"
