@@ -64,7 +64,9 @@ jobs:
         run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
         shell: bash
 
-      - name: Run Codex CLI in full-auto mode with issue description
+      - name: Run Codex CLI in full-auto mode
+        env:
+          OPENAI_API_KEY: ${{ secrets.open_api_key }}
         run: |
           num="${{ github.event.issue.number }}"
           title="${{ github.event.issue.title }}"
@@ -73,88 +75,18 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
-      - name: Commit all changed files via REST API (with sha logic & ignore)
-        uses: actions/github-script@v6
+      - name: Auto-commit any changes
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          github-token: ${{ env.GH_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const { owner, repo } = context.repo;
-            const branch = '${{ steps.derive_branch.outputs.branch }}';
-            const root = process.cwd();
-      
-            // 1) Load and parse .gitignore
-            const gitignore = path.join(root, '.gitignore');
-            const patterns = fs.existsSync(gitignore)
-              ? fs.readFileSync(gitignore, 'utf8')
-                  .split(/\r?\n/)
-                  .map(l => l.trim())
-                  .filter(l => l && !l.startsWith('#'))
-              : [];
-      
-            const regexes = patterns.map(pat => {
-              let re = pat.replace(/([.+^=!:${}()|[\]/\\])/g, '\\$1').replace(/\*/g, '.*');
-              if (re.startsWith('/')) re = '^' + re.slice(1);
-              else re = '(^|/)' + re;
-              return new RegExp(re);
-            });
-      
-            // 2) Walk the workspace
-            function walk(dir) {
-              return fs.readdirSync(dir, { withFileTypes: true }).flatMap(ent => {
-                const full = path.join(dir, ent.name);
-                return ent.isDirectory() ? walk(full) : [full];
-              });
-            }
-            const all = walk(root).map(fp => path.relative(root, fp));
-      
-            // 3) Filter out .gitignore + cache/binary files
-            const toCommit = all.filter(rel => {
-              if (regexes.some(rx => rx.test(rel))) return false;
-              if (rel.includes('__pycache__')) return false;
-              if (rel.endsWith('.pyc') || rel.endsWith('.pyo')) return false;
-              return true;
-            });
-      
-            if (toCommit.length === 0) {
-              console.log('Nothing to commit.');
-              return;
-            }
-      
-            // 4) Commit or update each file
-            for (const relPath of toCommit) {
-              const absPath = path.join(root, relPath);
-              const content = fs.readFileSync(absPath, 'utf8');
-              const params = {
-                owner,
-                repo,
-                path: relPath,
-                message: `chore: add/update ${relPath} for issue #${context.payload.issue.number}`,
-                content: Buffer.from(content).toString('base64'),
-                branch
-              };
-      
-              // if file exists, fetch its sha
-              try {
-                const { data: existing } = await github.rest.repos.getContent({
-                  owner,
-                  repo,
-                  path: relPath,
-                  ref: branch
-                });
-                params.sha = existing.sha;
-              } catch (err) {
-                if (err.status !== 404) throw err;
-                // 404 means new file → no sha needed
-              }
-      
-              await github.rest.repos.createOrUpdateFileContents(params);
-              console.log(`Committed ${relPath}`);
-            }
-      
-      
-
+          # commit everything that changed
+          commit_message: codex updates for issue #${{ github.event.issue.number }}
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          file_pattern: '.'                # or narrow to 'tests/unit/**'
+          commit_all: true
+        env:
+          # use your PAT or GITHUB_TOKEN
+          GIT_AUTOCOMMIT_COMMITTER_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
 
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
