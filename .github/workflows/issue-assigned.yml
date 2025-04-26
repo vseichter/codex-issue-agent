@@ -73,7 +73,7 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
-      - name: Commit all changed files via REST API (respecting .gitignore)
+      - name: Commit all changed files via REST API (with sha logic & ignore)
         uses: actions/github-script@v6
         with:
           github-token: ${{ env.GH_TOKEN }}
@@ -84,64 +84,75 @@ jobs:
             const branch = '${{ steps.derive_branch.outputs.branch }}';
             const root = process.cwd();
       
-            // 1) Load .gitignore patterns
-            const gitignorePath = path.join(root, '.gitignore');
-            let patterns = [];
-            if (fs.existsSync(gitignorePath)) {
-              patterns = fs.readFileSync(gitignorePath, 'utf8')
-                .split(/\r?\n/)
-                .map(l => l.trim())
-                .filter(l => l && !l.startsWith('#'));
-            }
+            // 1) Load and parse .gitignore
+            const gitignore = path.join(root, '.gitignore');
+            const patterns = fs.existsSync(gitignore)
+              ? fs.readFileSync(gitignore, 'utf8')
+                  .split(/\r?\n/)
+                  .map(l => l.trim())
+                  .filter(l => l && !l.startsWith('#'))
+              : [];
       
-            // 2) Convert patterns → regexes
             const regexes = patterns.map(pat => {
-              // escape regex chars, then turn '*' → '.*'
-              let re = pat
-                .replace(/([.+^=!:${}()|[\]/\\])/g, '\\$1')
-                .replace(/\*/g, '.*');
-              // leading slash = root-relative, else match anywhere segment
+              let re = pat.replace(/([.+^=!:${}()|[\]/\\])/g, '\\$1').replace(/\*/g, '.*');
               if (re.startsWith('/')) re = '^' + re.slice(1);
               else re = '(^|/)' + re;
               return new RegExp(re);
             });
       
-            // 3) Recursively walk and collect all files
+            // 2) Walk the workspace
             function walk(dir) {
               return fs.readdirSync(dir, { withFileTypes: true }).flatMap(ent => {
                 const full = path.join(dir, ent.name);
-                return ent.isDirectory()
-                  ? walk(full)
-                  : [full];
+                return ent.isDirectory() ? walk(full) : [full];
               });
             }
+            const all = walk(root).map(fp => path.relative(root, fp));
       
-            const allFiles = walk(root).map(fp => path.relative(root, fp));
-      
-            // 4) Filter out anything matching .gitignore
-            const toCommit = allFiles.filter(rel => {
-              return !regexes.some(rx => rx.test(rel));
+            // 3) Filter out .gitignore + cache/binary files
+            const toCommit = all.filter(rel => {
+              if (regexes.some(rx => rx.test(rel))) return false;
+              if (rel.includes('__pycache__')) return false;
+              if (rel.endsWith('.pyc') || rel.endsWith('.pyo')) return false;
+              return true;
             });
       
             if (toCommit.length === 0) {
-              console.log('No files to commit (all were ignored)');
+              console.log('Nothing to commit.');
               return;
             }
       
-            // 5) Commit each file via REST API
+            // 4) Commit or update each file
             for (const relPath of toCommit) {
               const absPath = path.join(root, relPath);
               const content = fs.readFileSync(absPath, 'utf8');
-              await github.rest.repos.createOrUpdateFileContents({
+              const params = {
                 owner,
                 repo,
                 path: relPath,
                 message: `chore: add/update ${relPath} for issue #${context.payload.issue.number}`,
                 content: Buffer.from(content).toString('base64'),
                 branch
-              });
+              };
+      
+              // if file exists, fetch its sha
+              try {
+                const { data: existing } = await github.rest.repos.getContent({
+                  owner,
+                  repo,
+                  path: relPath,
+                  ref: branch
+                });
+                params.sha = existing.sha;
+              } catch (err) {
+                if (err.status !== 404) throw err;
+                // 404 means new file → no sha needed
+              }
+      
+              await github.rest.repos.createOrUpdateFileContents(params);
               console.log(`Committed ${relPath}`);
             }
+      
       
 
 
