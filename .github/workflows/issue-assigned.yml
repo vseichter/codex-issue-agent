@@ -64,7 +64,14 @@ jobs:
         run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
         shell: bash
 
-      - name: Run Codex CLI in full-auto mode
+      - name: Checkout branch for Codex edits
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          ref: ${{ steps.derive_branch.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Run Codex CLI in full-auto mode (no push)
         env:
           OPENAI_API_KEY: ${{ secrets.open_api_key }}
         run: |
@@ -78,15 +85,21 @@ jobs:
       - name: Auto-commit any changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          # commit everything that changed
+          # stage all changed files
+          add_options: '-A'
+          # your commit message
           commit_message: codex updates for issue #${{ github.event.issue.number }}
+          # commit author
           commit_user_name: github-actions[bot]
           commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
-          file_pattern: '.'                # or narrow to 'tests/unit/**'
-          commit_all: true
+          # push back to the current branch
+          branch: ${{ steps.derive_branch.outputs.branch }}
+          # you can force-with-lease if you need
+          push_options: '--force-with-lease'
         env:
-          # use your PAT or GITHUB_TOKEN
-          GIT_AUTOCOMMIT_COMMITTER_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          # token with push rights
+          GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+
 
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
