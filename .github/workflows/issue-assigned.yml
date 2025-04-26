@@ -29,7 +29,7 @@ jobs:
             | sed -E 's/^-+|-+$//g')
           echo "branch=issue-${num}-${sanitized}" >> "$GITHUB_OUTPUT"
 
-      - name: Create (or fetch) branch via REST API
+      - name: Create (or fetch) branch
         uses: actions/github-script@v6
         with:
           github-token: ${{ env.GH_TOKEN }}
@@ -82,22 +82,42 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
+      - name: Generate AI-powered commit message
+        id: gen_commit_msg
+        run: |
+          # grab the diff
+          diff=$(git diff)
+
+          # call ChatGPT to generate a one-line, imperative commit message
+          commit_msg=$(curl https://api.openai.com/v1/chat/completions \
+            -s \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [
+                {"role": "system", "content": "You are a tool that writes concise, imperative git commit messages."},
+                {"role": "user", "content": "Issue #'"${{ github.event.issue.number }}"': '"${{ github.event.issue.title }}"' — '"${{ github.event.issue.body }}"' Diff:\n'"$diff"'"}
+              ]
+            }' | jq -r '.choices[0].message.content' | head -n1)
+
+          # expose for downstream steps
+          echo "commit_message=$commit_msg" >> $GITHUB_OUTPUT
+        env:
+          OPENAI_API_KEY: ${{ secrets.open_api_key }}
+        shell: bash
+
       - name: Auto-commit any changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          # stage all changed files
           add_options: '-A'
-          # your commit message
-          commit_message: codex updates for issue #${{ github.event.issue.number }}
-          # commit author
+          # pull in the AI-generated message
+          commit_message: ${{ steps.gen_commit_msg.outputs.commit_message }}
           commit_user_name: github-actions[bot]
           commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
-          # push back to the current branch
           branch: ${{ steps.derive_branch.outputs.branch }}
-          # you can force-with-lease if you need
           push_options: '--force-with-lease'
         env:
-          # token with push rights
           GITHUB_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
 
 
@@ -116,16 +136,4 @@ jobs:
               base,
               title: `chore: add placeholder test for issue #${issueNumber}`,
               body: `Automated PR to add placeholder test for issue #${issueNumber}: ${{ github.event.issue.title }}`
-            });
-
-      - name: Comment on the issue
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Issue #${context.issue.number} assigned to vseichter at ${new Date().toISOString()}`
             });
