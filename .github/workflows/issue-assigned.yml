@@ -139,12 +139,11 @@ jobs:
       - name: Generate PR description
         id: gen_pr_body
         run: |
-          # fetch default branch so we can diff against it
           base="${{ github.event.repository.default_branch }}"
           git fetch origin "$base":"$base"
           diff=$(git diff "$base"...HEAD || true)
 
-          # call OpenAI
+          # call OpenAI for markdown PR body
           pr_body=$(jq -n --arg num "${{ github.event.issue.number }}" \
                             --arg title "${{ github.event.issue.title }}" \
                             --arg body "${{ github.event.issue.body }}" \
@@ -152,8 +151,8 @@ jobs:
             '{
               model: "gpt-4o-mini",
               messages: [
-                {role:"system", content:"You are an expert at writing clear, concise GitHub pull request descriptions. Highlight what changed, why, and any testing instructions in markdown."},
-                {role:"user", content:"Issue #\($num): \($title)\n\nIssue description:\n\($body)\n\nDiff:\n\($diff)\n\nWrite me a PR description in markdown."}
+                {role:"system", content:"You are an expert at writing clear, concise GitHub pull request descriptions. Use markdown."},
+                {role:"user", content:"Issue #\($num): \($title)\n\nIssue description:\n\($body)\n\nDiff:\n\($diff)\n\nWrite a detailed PR description in markdown."}
               ],
               max_tokens: 300
             }' \
@@ -168,20 +167,23 @@ jobs:
             pr_body="Automated PR for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
           fi
 
-          # JSON-encode so JS can safely parse it
-          pr_body_escaped=$(jq -Rs . <<< "$pr_body")
-          echo "pr_body=$pr_body_escaped" >> "$GITHUB_OUTPUT"
+          # base64‐encode so it's safe in env/output
+          pr_body_b64=$(printf '%s' "$pr_body" | base64 -w0)
+          echo "pr_body_b64=$pr_body_b64" >> $GITHUB_OUTPUT
         env:
           OPENAI_API_KEY: ${{ secrets.open_api_key }}
         shell: bash
-
+  
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
+        env:
+          GH_TOKEN:      ${{ env.GH_TOKEN }}
+          PR_BODY_B64:  ${{ steps.gen_pr_body.outputs.pr_body_b64 }}
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
-            // parse our clean, JSON-encoded PR body
-            const prBody = JSON.parse('${{ steps.gen_pr_body.outputs.pr_body }}');
+            // decode our base64‐encoded markdown
+            const prBody = Buffer.from(process.env.PR_BODY_B64, 'base64').toString('utf8');
 
             await github.rest.pulls.create({
               owner: context.repo.owner,
