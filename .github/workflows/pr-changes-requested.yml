@@ -31,6 +31,10 @@ jobs:
 
       - name: Install OpenAI Codex CLI
         run: npm install -g @openai/codex
+        
+      - name: Set OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.open_api_key }}" >> $GITHUB_ENV
+        shell: bash
 
       - name: Apply review changes using Codex
         shell: bash
