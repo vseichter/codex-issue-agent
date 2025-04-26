@@ -73,7 +73,7 @@ jobs:
           codex --full-auto --quiet "$prompt"
         shell: bash
 
-      - name: Commit all files in tests/unit via REST API
+      - name: Commit all changed files via REST API (respecting .gitignore)
         uses: actions/github-script@v6
         with:
           github-token: ${{ env.GH_TOKEN }}
@@ -82,42 +82,67 @@ jobs:
             const path = require('path');
             const { owner, repo } = context.repo;
             const branch = '${{ steps.derive_branch.outputs.branch }}';
-            // Change this to whatever directory you want to commit
-            const dir = './';
-
-            // Recursively collect all files under `dir`
-            function walk(dirPath) {
-              return fs.readdirSync(dirPath, { withFileTypes: true }).flatMap(ent => {
-                const full = path.join(dirPath, ent.name);
+            const root = process.cwd();
+      
+            // 1) Load .gitignore patterns
+            const gitignorePath = path.join(root, '.gitignore');
+            let patterns = [];
+            if (fs.existsSync(gitignorePath)) {
+              patterns = fs.readFileSync(gitignorePath, 'utf8')
+                .split(/\r?\n/)
+                .map(l => l.trim())
+                .filter(l => l && !l.startsWith('#'));
+            }
+      
+            // 2) Convert patterns → regexes
+            const regexes = patterns.map(pat => {
+              // escape regex chars, then turn '*' → '.*'
+              let re = pat
+                .replace(/([.+^=!:${}()|[\]/\\])/g, '\\$1')
+                .replace(/\*/g, '.*');
+              // leading slash = root-relative, else match anywhere segment
+              if (re.startsWith('/')) re = '^' + re.slice(1);
+              else re = '(^|/)' + re;
+              return new RegExp(re);
+            });
+      
+            // 3) Recursively walk and collect all files
+            function walk(dir) {
+              return fs.readdirSync(dir, { withFileTypes: true }).flatMap(ent => {
+                const full = path.join(dir, ent.name);
                 return ent.isDirectory()
                   ? walk(full)
                   : [full];
               });
             }
-
-            if (!fs.existsSync(dir)) {
-              console.log(`Directory "${dir}" not found skipping.`);
+      
+            const allFiles = walk(root).map(fp => path.relative(root, fp));
+      
+            // 4) Filter out anything matching .gitignore
+            const toCommit = allFiles.filter(rel => {
+              return !regexes.some(rx => rx.test(rel));
+            });
+      
+            if (toCommit.length === 0) {
+              console.log('No files to commit (all were ignored)');
               return;
             }
-
-            const files = walk(dir);
-            if (files.length === 0) {
-              console.log(`No files to commit in "${dir}".`);
-              return;
-            }
-
-            for (const filePath of files) {
-              const content = fs.readFileSync(filePath, 'utf8');
+      
+            // 5) Commit each file via REST API
+            for (const relPath of toCommit) {
+              const absPath = path.join(root, relPath);
+              const content = fs.readFileSync(absPath, 'utf8');
               await github.rest.repos.createOrUpdateFileContents({
                 owner,
                 repo,
-                path: filePath,
-                message: `chore: add/update ${filePath} for issue #${context.payload.issue.number}`,
+                path: relPath,
+                message: `chore: add/update ${relPath} for issue #${context.payload.issue.number}`,
                 content: Buffer.from(content).toString('base64'),
                 branch
               });
-              console.log(`Committed ${filePath}`);
+              console.log(`Committed ${relPath}`);
             }
+      
 
 
       - name: Open Pull Request via REST API
