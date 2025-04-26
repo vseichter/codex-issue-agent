@@ -72,33 +72,53 @@ jobs:
           prompt="Issue #${num}: ${title}\n\n${body}"
           codex --full-auto --quiet "$prompt"
         shell: bash
-        
-      - name: Update folder contents
+
+      - name: Commit all files in tests/unit via REST API
         uses: actions/github-script@v6
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
             const fs = require('fs');
+            const path = require('path');
             const { owner, repo } = context.repo;
             const branch = '${{ steps.derive_branch.outputs.branch }}';
-            const issueNumber = context.payload.issue.number;
-      
-            // read the test file you generated via Codex CLI
-            const filePath = 'tests/unit/test_placeholder.py';
-            if (!fs.existsSync(filePath)) {
-              throw new Error(`${filePath} not found – make sure your Codex step wrote it`);
+            // Change this to whatever directory you want to commit
+            const dir = './';
+
+            // Recursively collect all files under `dir`
+            function walk(dirPath) {
+              return fs.readdirSync(dirPath, { withFileTypes: true }).flatMap(ent => {
+                const full = path.join(dirPath, ent.name);
+                return ent.isDirectory()
+                  ? walk(full)
+                  : [full];
+              });
             }
-            const testContent = fs.readFileSync(filePath, 'utf8');
-      
-            // commit/update via the REST API
-            await github.rest.repos.createOrUpdateFileContents({
-              owner,
-              repo,
-              path: filePath,
-              message: `chore: add placeholder test for issue #${issueNumber}`,
-              content: Buffer.from(testContent).toString('base64'),
-              branch
-            });
+
+            if (!fs.existsSync(dir)) {
+              console.log(`Directory "${dir}" not found skipping.`);
+              return;
+            }
+
+            const files = walk(dir);
+            if (files.length === 0) {
+              console.log(`No files to commit in "${dir}".`);
+              return;
+            }
+
+            for (const filePath of files) {
+              const content = fs.readFileSync(filePath, 'utf8');
+              await github.rest.repos.createOrUpdateFileContents({
+                owner,
+                repo,
+                path: filePath,
+                message: `chore: add/update ${filePath} for issue #${context.payload.issue.number}`,
+                content: Buffer.from(content).toString('base64'),
+                branch
+              });
+              console.log(`Committed ${filePath}`);
+            }
+
 
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
