@@ -139,66 +139,55 @@ jobs:
       - name: Generate PR description
         id: gen_pr_body
         run: |
-          # get the diff against default branch (if any)
+          # fetch default branch so we can diff against it
           base="${{ github.event.repository.default_branch }}"
           git fetch origin "$base":"$base"
           diff=$(git diff "$base"...HEAD || true)
 
-          # build payload
-          payload=$(jq -n --arg num "${{ github.event.issue.number }}" \
-                          --arg title "${{ github.event.issue.title }}" \
-                          --arg body "${{ github.event.issue.body }}" \
-                          --arg diff "$diff" \
+          # call OpenAI
+          pr_body=$(jq -n --arg num "${{ github.event.issue.number }}" \
+                            --arg title "${{ github.event.issue.title }}" \
+                            --arg body "${{ github.event.issue.body }}" \
+                            --arg diff "$diff" \
             '{
               model: "gpt-4o-mini",
               messages: [
-                {role:"system", content:"You are an expert at writing clear, concise GitHub pull request descriptions. Highlight what changed, why, and any testing instructions."},
-                {role:"user", content:"Issue #\($num): \($title)\n\nDescription:\n\($body)\n\nDiff:\n\($diff)\n\nWrite a detailed PR description in markdown."}
+                {role:"system", content:"You are an expert at writing clear, concise GitHub pull request descriptions. Highlight what changed, why, and any testing instructions in markdown."},
+                {role:"user", content:"Issue #\($num): \($title)\n\nIssue description:\n\($body)\n\nDiff:\n\($diff)\n\nWrite me a PR description in markdown."}
               ],
               max_tokens: 300
-            }'
-          )
+            }' \
+          | curl -s https://api.openai.com/v1/chat/completions \
+              -H "Authorization: Bearer $OPENAI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d @- \
+          | jq -r '.choices[0].message.content')
 
-          # call the API
-          response=$(curl -s https://api.openai.com/v1/chat/completions \
-            -H "Authorization: Bearer $OPENAI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$payload")
-
-          # extract and fallback
-          pr_body=$(echo "$response" | jq -r '.choices[0].message.content')
+          # fallback
           if [[ -z "$pr_body" ]] || [[ "$pr_body" == "null" ]]; then
             pr_body="Automated PR for issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
           fi
 
-          # emit multiline output
-          echo "pr_body<<EOF" >> $GITHUB_OUTPUT
-          echo "$pr_body"        >> $GITHUB_OUTPUT
-          echo "EOF"             >> $GITHUB_OUTPUT
+          # JSON-encode so JS can safely parse it
+          pr_body_escaped=$(jq -Rs . <<< "$pr_body")
+          echo "pr_body=$pr_body_escaped" >> "$GITHUB_OUTPUT"
         env:
           OPENAI_API_KEY: ${{ secrets.open_api_key }}
         shell: bash
-  
+
       - name: Open Pull Request via REST API
         uses: actions/github-script@v6
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
-            const { owner, repo } = context.repo;
-            const branch = '${{ steps.derive_branch.outputs.branch }}';
-            const base   = context.payload.repository.default_branch;
-            const issue  = context.payload.issue;
-
-            // Use the issue title directly as the PR title
-            const prTitle = issue.title;
-            // Inject our AI-generated body
-            const prBody  = `${{ steps.gen_pr_body.outputs.pr_body }}`;
+            // parse our clean, JSON-encoded PR body
+            const prBody = JSON.parse('${{ steps.gen_pr_body.outputs.pr_body }}');
 
             await github.rest.pulls.create({
-              owner,
-              repo,
-              head: branch,ß
-              base,
-              title: prTitle,
-              body: prBody
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              head:  '${{ steps.derive_branch.outputs.branch }}',
+              base:  context.payload.repository.default_branch,
+              title: context.payload.issue.title,
+              body:  prBody
             });
