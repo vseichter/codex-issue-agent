@@ -112,7 +112,7 @@ These permissions are already configured in the workflow files using the `permis
 By default, the `issue-assigned.yml` workflow only triggers when issues are assigned to the user `vseichter`. To change this:
 
 1. Edit `.github/workflows/issue-assigned.yml`
-2. Find the line: `if: ${{ github.event.assignee.login == 'vseichter' }}`
+2. Find the condition in the `create-branch-and-pr` job: `if: ${{ github.event.assignee.login == 'vseichter' }}`
 3. Replace `'vseichter'` with your GitHub username
 
 Example:
