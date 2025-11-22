@@ -77,14 +77,23 @@ The agent uses OpenAI's API for Codex CLI and GPT models. You'll need an OpenAI 
 6. Copy the API key immediately (you won't be able to see it again)
 
 **Add the OpenAI API key to your repository:**
+
+The workflows use two secret names for the OpenAI API key. You should add both:
+
 1. Go to your repository on GitHub
 2. Navigate to Settings > Secrets and variables > Actions
-3. Click "New repository secret"
-4. Name: `open_api_key` (note: both workflows use this name)
-5. Value: Paste your OpenAI API key
-6. Click "Add secret"
+3. Add the first secret:
+   - Click "New repository secret"
+   - Name: `open_api_key`
+   - Value: Paste your OpenAI API key
+   - Click "Add secret"
+4. Add the second secret:
+   - Click "New repository secret"
+   - Name: `OPENAI_API_KEY`
+   - Value: Paste the same OpenAI API key
+   - Click "Add secret"
 
-**Optional:** You can also add `OPENAI_API_KEY` as an additional secret name for compatibility.
+Both secrets are required because different parts of the workflows reference different names.
 
 **Official OpenAI documentation:**
 - [OpenAI API Keys](https://platform.openai.com/docs/quickstart/account-setup)
@@ -103,7 +112,7 @@ These permissions are already configured in the workflow files using the `permis
 By default, the `issue-assigned.yml` workflow only triggers when issues are assigned to the user `vseichter`. To change this:
 
 1. Edit `.github/workflows/issue-assigned.yml`
-2. Find line 14: `if: ${{ github.event.assignee.login == 'vseichter' }}`
+2. Find the line: `if: ${{ github.event.assignee.login == 'vseichter' }}`
 3. Replace `'vseichter'` with your GitHub username
 
 Example:
