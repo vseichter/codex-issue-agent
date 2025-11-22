@@ -71,7 +71,7 @@ jobs:
           ref: ${{ steps.derive_branch.outputs.branch }}
           fetch-depth: 0
 
-      - name: Run Codex CLI in full-auto mode (no push)
+      - name: Run Codex CLI in non-interactive exec mode (no push)
         env:
           OPENAI_API_KEY: ${{ secrets.open_api_key }}
         run: |
@@ -79,7 +79,7 @@ jobs:
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
-          codex --full-auto "$prompt" > /dev/null 2>&1
+          codex exec --full-auto "$prompt"
         shell: bash
 
 
