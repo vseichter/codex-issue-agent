@@ -79,8 +79,9 @@ jobs:
           title="${{ github.event.issue.title }}"
           body="${{ github.event.issue.body }}"
           prompt="Issue #${num}: ${title}\n\n${body}"
-          codex --full-auto "$prompt"
+          codex --full-auto "$prompt" > /dev/null 2>&1
         shell: bash
+
 
       - name: Generate AI-powered commit message
         id: gen_commit_msg
